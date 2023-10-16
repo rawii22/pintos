@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -92,6 +93,11 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    
+    /* Variables used for alarm clock. */
+    int64_t wakeup_time;                /* Time thread should wake up. */
+    struct semaphore alarm_sema;        /* Sema for alarm clock. */
+    struct list_elem timer_elem;        /* List element for alarm clock. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

@@ -24,6 +24,9 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+/* List of all sleeping alarm clock threads. */
+static struct list sleeping_threads;
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -31,12 +34,14 @@ static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
-   and registers the corresponding interrupt. */
+   and registers the corresponding interrupt.
+   Also initializes the sleeping alarms list. */
 void
 timer_init (void) 
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init(&sleeping_threads);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -84,16 +89,40 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+/* Compares two threads based off when they're supposed to wake up. */
+bool 
+sleep_order(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED) {
+  const struct thread* thread_a = list_entry(a, struct thread, timer_elem);
+  const struct thread* thread_b = list_entry(b, struct thread, timer_elem);
+  return thread_a->wakeup_time < thread_b->wakeup_time;
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
+  /* Checks to make sure the thread is sleeping for a positive number of ticks. */
+  if (ticks <= 0){
+    return;
+  }
 
+  /* Get a pointer to the current thread. */
+  struct thread *t = thread_current ();
+
+  /* Set the tick amount that the thread is supposed to wake up at. */
+  int64_t start = timer_ticks ();
+  t->wakeup_time = start + ticks;
+  
+  /* Add the thread to an ordered list of all sleeping alarms. */
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  intr_disable();
+  list_insert_ordered(&sleeping_threads, &t->timer_elem, sleep_order, NULL);
+  intr_enable();
+
+  /* Set the thread to sleep until it's ready. */
+  sema_init(&t->alarm_sema, 0);
+  sema_down(&t->alarm_sema);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -170,8 +199,28 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  /* Updates the amount of passed ticks. */
   ticks++;
   thread_tick ();
+
+  struct thread* t;
+
+  /* Checks if there are any threads that are set to wake up. */
+  while(!list_empty(&sleeping_threads)) {
+    t = list_entry(list_front(&sleeping_threads), struct thread, timer_elem);
+
+    /* Check if the first thread in the list is set to wake up. */
+    if(ticks >= t->wakeup_time) {
+      /* If it is supposed to wake up, wake it up and
+          remove it from the sleeping alarms list. */
+      sema_up(&t->alarm_sema);
+      list_pop_front(&sleeping_threads);
+    }
+    else {
+      /* Otherwise, end the loop. */
+      break;
+    }
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
