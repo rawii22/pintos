@@ -341,16 +341,26 @@ bool thread_cmp_priority(const struct list_elem *a, const struct list_elem *b, v
 void
 thread_set_priority (int new_priority) 
 {
+  struct thread *t = thread_current();
+
   enum intr_level old_level = intr_disable();
 
-  thread_current()->priority = new_priority;
-  thread_current()->original_priority = new_priority;
-  if (!list_empty(&thread_current()->donations))
+  /* Set the threads priorities. */
+  t->priority = new_priority;
+  t->original_priority = new_priority;
+
+  /* If there are any threads donating their priorities. */
+  if (!list_empty(&t->donations))
   {
-    int temp_list_max = list_max(&thread_current()->donations, thread_cmp_priority, NULL);
-    if (temp_list_max > new_priority)
+    /* Get the highest priority thread from the donors. */
+    struct thread *highest_priority_donor = list_front(&t->donations);
+    int highest_priority = highest_priority_donor->priority;
+
+    /* If that thread's priority is higher than the current priority. */
+    if (highest_priority > new_priority)
     {
-      thread_current()->priority = temp_list_max;
+      /* Set the thread's funcitonal priority to the donated value. */
+      t->priority = highest_priority;
     }
   }
 
