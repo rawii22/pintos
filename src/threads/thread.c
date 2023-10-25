@@ -341,8 +341,20 @@ bool thread_cmp_priority(const struct list_elem *a, const struct list_elem *b, v
 void
 thread_set_priority (int new_priority) 
 {
-  //TODO: disable interrupts before altering priority
+  enum intr_level old_level = intr_disable();
+
   thread_current()->priority = new_priority;
+  thread_current()->original_priority = new_priority;
+  if (!list_empty(&thread_current()->donations))
+  {
+    int temp_list_max = list_max(&thread_current()->donations, thread_cmp_priority, NULL);
+    if (temp_list_max > new_priority)
+    {
+      thread_current()->priority = temp_list_max;
+    }
+  }
+
+  intr_set_level(old_level);
   thread_yield();
 }
 
@@ -470,6 +482,8 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->original_priority = priority;
+  list_init(&t->donations);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
