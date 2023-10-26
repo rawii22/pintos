@@ -348,19 +348,35 @@ thread_set_priority (int new_priority)
 
   enum intr_level old_level = intr_disable();
 
-  /* Set the threads priorities. */
-  t->priority = new_priority;
+  /* Set the threads priority. */
   t->original_priority = new_priority;
+
+  /* Calculate the threads effective priority and set it. */
+  thread_check_donated_priority(t);
+
+  intr_set_level(old_level);
+  thread_yield();
+}
+
+/* Recalculates the threads priority using donated priorities. */
+void
+thread_check_donated_priority(struct thread *t)
+{
+  enum intr_level old_level = intr_disable();
+
+  /* Set the thread's effective priority to its base priority. */
+  t->priority = t->original_priority;
 
   /* If there are any threads donating their priorities. */
   if (!list_empty(&t->donations))
   {
     /* Get the highest priority thread from the donors. */
+    list_sort(&t->donations, thread_cmp_priority, NULL);
     struct thread *highest_priority_donor = list_front(&t->donations);
     int highest_priority = highest_priority_donor->priority;
 
     /* If that thread's priority is higher than the current priority. */
-    if (highest_priority > new_priority)
+    if (highest_priority > t->original_priority)
     {
       /* Set the thread's funcitonal priority to the donated value. */
       t->priority = highest_priority;
@@ -368,7 +384,6 @@ thread_set_priority (int new_priority)
   }
 
   intr_set_level(old_level);
-  thread_yield();
 }
 
 /* Returns the current thread's priority. */
