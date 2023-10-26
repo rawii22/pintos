@@ -101,6 +101,8 @@ struct thread
     struct list_elem timer_elem;        /* List element for alarm clock. */
 
     struct list donations;              /* List of threads currently donating their priorities. */
+    struct list_elem donation_elem;     /* List element for donated priorities. */
+    struct thread *donating_to;         /* Pointer to a thread that is being directly donated to. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

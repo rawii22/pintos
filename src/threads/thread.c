@@ -372,7 +372,7 @@ thread_check_donated_priority(struct thread *t)
   {
     /* Get the highest priority thread from the donors. */
     list_sort(&t->donations, thread_cmp_priority, NULL);
-    struct thread *highest_priority_donor = list_front(&t->donations);
+    struct thread *highest_priority_donor = list_entry(list_front(&t->donations), struct thread, donation_elem);
     int highest_priority = highest_priority_donor->priority;
 
     /* If that thread's priority is higher than the current priority. */
