@@ -326,9 +326,10 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  if (!list_empty (&cond->waiters)){
+    list_sort(&cond->waiters, conditional_cmp_priority, NULL);
+    sema_up (&list_entry (list_pop_front (&cond->waiters), struct semaphore_elem, elem)->semaphore);
+  } 
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -345,4 +346,14 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+/* Compares the priority of threads that are waiting on a condition variable. */
+bool
+conditional_cmp_priority(const struct list_elem *left, const struct list_elem *right, void *aux UNUSED)
+{
+  struct semaphore_elem *left_sema = list_entry(left, struct semaphore_elem, elem);
+  struct semaphore_elem *right_sema = list_entry(right, struct semaphore_elem, elem);
+
+  return (thread_cmp_priority(list_front(&left_sema->semaphore.waiters),list_front(&right_sema->semaphore.waiters), NULL));
 }
