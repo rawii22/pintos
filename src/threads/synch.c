@@ -204,6 +204,22 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  /* Handle priority donation. */
+  enum intr_level old_level = intr_disable();
+
+  /* If the lock is already being held. */
+  if(lock->semaphore.value == 0)
+  {
+    struct thread *t = thread_current();
+    /* Donate the thread's priority to the lock holder. */
+    t->donating_to = lock->holder;
+    list_insert_ordered(&lock->holder->donations, &t->donation_elem, thread_cmp_priority_donation, NULL);
+    /* Recalculate the lock holders priority. */
+    recalculate_donated_priority_up(lock->holder);
+  }
+
+  intr_set_level(old_level);
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -240,6 +256,35 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+
+  enum intr_level old_level = intr_disable ();
+
+  /* Accounting for removing donated priorities. */
+  /* If there are any threads who were donating priorities. */
+  if (!list_empty(&lock->semaphore.waiters))
+  {
+    /* For every thread waiting for the lock. */
+    struct list_elem *e;
+    for (e = list_begin(&lock->semaphore.waiters); e != list_end(&lock->semaphore.waiters); e = list_next(e))
+    {
+      struct thread *t = list_entry (e, struct thread, elem);
+      /* And for every thread donating priority to the lock holder. */
+      struct list_elem *ee;
+      for (ee = list_begin(&thread_current()->donations); ee != list_end(&thread_current()->donations); ee = list_next(ee))
+      {
+        /* If they're the same thread, remove that thread from the donation list. */
+        if (&t->donation_elem == ee)
+        {
+          list_remove(ee);
+          t->donating_to = NULL;
+          break;
+        }
+      }
+    }
+    recalculate_donated_priority_up(lock->holder);
+  }
+
+  intr_set_level (old_level);
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);

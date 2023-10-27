@@ -340,6 +340,11 @@ bool thread_cmp_priority(const struct list_elem *a, const struct list_elem *b, v
   return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
 }
 
+/* Compares two threads based on their priority. Use for donations. */
+bool thread_cmp_priority_donation(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED) {
+  return list_entry(a, struct thread, donation_elem)->priority > list_entry(b, struct thread, donation_elem)->priority;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
@@ -371,9 +376,8 @@ thread_check_donated_priority(struct thread *t)
   if (!list_empty(&t->donations))
   {
     /* Get the highest priority thread from the donors. */
-    list_sort(&t->donations, thread_cmp_priority, NULL);
-    struct thread *highest_priority_donor = list_entry(list_front(&t->donations), struct thread, donation_elem);
-    int highest_priority = highest_priority_donor->priority;
+    list_sort(&t->donations, thread_cmp_priority_donation, NULL);
+    int highest_priority = list_entry(list_front(&t->donations), struct thread, donation_elem)->priority;
 
     /* If that thread's priority is higher than the current priority. */
     if (highest_priority > t->original_priority)
@@ -381,6 +385,24 @@ thread_check_donated_priority(struct thread *t)
       /* Set the thread's funcitonal priority to the donated value. */
       t->priority = highest_priority;
     }
+  }
+
+  intr_set_level(old_level);
+}
+
+/* Recursively calculates thread donated priority upwards. */
+void
+recalculate_donated_priority_up(struct thread *t)
+{
+  enum intr_level old_level = intr_disable();
+
+  /* Tell the thread to reclalculate it's priority. */
+  thread_check_donated_priority(t);
+
+  /* If this thread is donating its priority. */
+  if (t->donating_to != NULL){
+    /* Make that thread do this process. */
+    recalculate_donated_priority_up(t->donating_to);
   }
 
   intr_set_level(old_level);
@@ -512,6 +534,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->original_priority = priority;
   list_init(&t->donations);
+  t->donating_to = NULL;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
