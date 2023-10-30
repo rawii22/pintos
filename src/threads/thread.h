@@ -90,6 +90,8 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     int original_priority;              /* Priority of thread without donations included. */
+    int nice;                           /* The niceness value of the thread. */
+    int recent_cpu;                     /* A measurement of the thread's recent CPU time. 17.14 Formatted. */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -147,10 +149,16 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 void thread_check_donated_priority(struct thread *);
 void recalculate_donated_priority_up(struct thread *);
+void recalculate_MLFQS_priority(struct thread *);
+void recalculate_MLFQS_priority_all(void);
 
 int thread_get_nice (void);
+void recalculate_load_avg(void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+void increment_current_threads_recent_cpu(void);
+void recalculate_recent_cpu(struct thread *t);
+void recalculate_recent_cpu_all(void);
 
 #endif /* threads/thread.h */

@@ -20,6 +20,9 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+/* Used for fixed point arithmetic calculations. */
+#define FXP_FORMATTER 16384
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -49,6 +52,9 @@ struct kernel_thread_frame
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
+
+/* Average number of threads ready to run over the last minute. 17.14 Formatted.*/
+int load_avg;
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -92,6 +98,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  load_avg = 0;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -408,6 +415,42 @@ recalculate_donated_priority_up(struct thread *t)
   intr_set_level(old_level);
 }
 
+/* Recalculate the passed thread's priority based off MLFQS formulas. */
+void 
+recalculate_MLFQS_priority(struct thread *t)
+{
+  if (t->recent_cpu > 0)
+  {
+    t->priority = PRI_MAX - (((t->recent_cpu / 4) + (FXP_FORMATTER / 2)) / FXP_FORMATTER) - (t->nice * 2);
+  }
+  else
+  {
+    t->priority = PRI_MAX - (((t->recent_cpu / 4) - (FXP_FORMATTER / 2)) / FXP_FORMATTER) - (t->nice * 2);
+  }
+
+  /* Account for values outside of the acceptable range. */
+  if (t->priority > PRI_MAX)
+  {
+    t->priority = PRI_MAX;
+  }
+  else if (t->priority < PRI_MIN)
+  {
+    t->priority = PRI_MIN;
+  }
+}
+
+/* Recalculates all threads' priority values. */
+void
+recalculate_MLFQS_priority_all(void)
+{
+  struct list_elem *e;
+  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+  {
+    struct thread *t = list_entry(e, struct thread, allelem);
+    recalculate_MLFQS_priority(t);
+  }
+}
+
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
@@ -417,34 +460,77 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice)
 {
-  /* Not yet implemented. */
+  thread_current()->nice = nice;
+  if (nice > 20)
+  {
+    nice = 20;
+  }
+  else if (nice < -20)
+  {
+    nice = -20;
+  }
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
+}
+
+/* Recalculate the load average. */
+void
+recalculate_load_avg(void)
+{
+  int temp = 1;
+  if (thread_current() == idle_thread){
+    temp = 0;
+  }
+  load_avg = (59 * load_avg / 60) + (list_size(&ready_list) + temp) * FXP_FORMATTER / 60;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return (load_avg * 100) / FXP_FORMATTER;
+}
+
+/* Increments the current thread's recent_cpu by 1. */
+void
+increment_current_threads_recent_cpu(void)
+{
+  thread_current()->recent_cpu += FXP_FORMATTER;
+}
+
+/* Recalculates the passed thread's recent_cpu value. */
+void
+recalculate_recent_cpu(struct thread *t)
+{
+  t->recent_cpu = ((int64_t) ((int64_t) (2 * load_avg) * FXP_FORMATTER / (2 * load_avg + FXP_FORMATTER)) * t->recent_cpu / FXP_FORMATTER) + (t->nice * FXP_FORMATTER);
+}
+
+/* Recalculates all threads' recent_cpu values. */
+void
+recalculate_recent_cpu_all(void)
+{
+  struct list_elem *e;
+  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+  {
+    struct thread *t = list_entry(e, struct thread, allelem);
+    recalculate_recent_cpu(t);
+  }
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return ((thread_current()->recent_cpu) * 100) / FXP_FORMATTER;
 }
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -533,6 +619,17 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
+  t->nice = 0;
+
+  /* Setting recent_cpu. */
+  t->recent_cpu = 0;
+  struct thread *parentThread = running_thread();
+
+  if (is_thread(parentThread) && parentThread->status == THREAD_RUNNING)
+  {
+    t->recent_cpu = parentThread->recent_cpu;
+  }
+
   list_init(&t->donations);
   t->donating_to = NULL;
   t->magic = THREAD_MAGIC;

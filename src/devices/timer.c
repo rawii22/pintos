@@ -203,6 +203,26 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
 
+  /* MLFQS Calculations. */
+  if (thread_mlfqs){
+    /* Increment the running thread's CPU. */
+    increment_current_threads_recent_cpu();
+
+    if (ticks % 4 == 0)
+    {
+      /* Recalculate every threads' priority. */
+      recalculate_MLFQS_priority_all();
+    }
+    if (ticks % TIMER_FREQ == 0)
+    {
+      /* Recalcate load average. */
+      recalculate_load_avg();
+
+      /* Recalculate EVERY threads' recent CPU. */
+      recalculate_recent_cpu_all();
+    }
+  }
+
   struct thread* t;
 
   /* Checks if there are any threads that are set to wake up. */
