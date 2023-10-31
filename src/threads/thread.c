@@ -53,7 +53,7 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-/* Average number of threads ready to run over the last minute. 17.14 Formatted.*/
+/* Average number of threads ready to run over the last minute. 17.14 Formatted. */
 int load_avg;
 
 /* Scheduling. */
@@ -348,7 +348,8 @@ bool thread_cmp_priority(const struct list_elem *a, const struct list_elem *b, v
 }
 
 /* Compares two threads based on their priority. Use for donations. */
-bool thread_cmp_priority_donation(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED) {
+bool thread_cmp_priority_donation(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED)
+{
   return list_entry(a, struct thread, donation_elem)->priority > list_entry(b, struct thread, donation_elem)->priority;
 }
 
