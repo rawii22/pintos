@@ -27,6 +27,7 @@ GitHub: https://github.com/rawii22/pintos
 
 ---- DATA STRUCTURES ----
 
+A1:
 Objects/Variables
 Added to timer.c:
 static struct list sleeping_threads;	/* List of all sleeping alarm clock threads. */
@@ -60,14 +61,15 @@ void timer_init (void);			/* To initialize the sleeping_threads list! */
 
 ---- SYNCHRONIZATION ----
 
-How are race conditions avoided when multiple threads call timer_sleep() simultaneously?
+A4: How are race conditions avoided when multiple threads call timer_sleep() simultaneously?
 - When timer_sleep() adds a thread to the list of sleeping threads, it disables interrupts to avoid race conditions.
 
-How are race conditions avoided when a timer interrupt occurs during a call to timer_sleep()?
+A5: How are race conditions avoided when a timer interrupt occurs during a call to timer_sleep()?
 - Such a case will not impact the flow of the code since all the related operations are atomized.
 
 ---- RATIONALE ----
 
+A6:
 For timer_sleep, we first check if the ticks count is positive, otherwise the function should return. Then, we set the thread's specific time to wake up
 relative to the ticks variable so that a single comparison can determine if a thread needs to wake up. We order the list of sleeping threads so that
 less comparisons are performed in the interrupt handler, and it makes implementing priority in the future easier. In the timer_interrupt function, we
@@ -79,6 +81,7 @@ threads in the list.
 
 ---- DATA STRUCTURES ----
 
+B1:
 Objects/Variables
 In thread.h, added to the struct thread object:
 int original_priority;              /* Priority of thread without donations included. */
@@ -114,6 +117,10 @@ void cond_signal (struct condition *cond, struct lock *lock UNUSED); /* Sort the
 void lock_acquire (struct lock *lock); 		/* If a lock is already being held, donate priority to the thread holding the lock. */
 void lock_release (struct lock *lock); 		/* Remove donated priorities as needed. */
 
+
+B2:
+Refer to B2-PintosDesignDocument.png
+
 ---- ALGORITHMS ----
 
 B3: How do you ensure that the highest priority thread waiting for a lock, semaphore, or condition variable wakes up first?
@@ -146,6 +153,7 @@ B5: Describe the sequence of events when lock_release() is called on a lock that
 
 ---- DATA STRUCTURES ----
 
+C1:
 Objects/Variables
 In thread.h, added to the struct thread object:
 int nice;						/* The niceness value of the thread. */
